@@ -13,22 +13,22 @@ app.use(cors());
 // Middleware
 app.use(bodyParser.json());
 
-// const conn = mysql.createConnection({
-//   host: 'localhost',
-//   user: 'root',
-//   password: '1123',
-//   port: '3306',
-//   database: 'xyz',
-// });
-
-// // MySQL config
-const connection = mysql.createConnection({
-  host: process.env.MYSQLHOST,
-  port: process.env.MYSQLPORT,
-  user: process.env.MYSQLUSER,
-  password: process.env.MYSQLPASSWORD,
-  database: process.env.MYSQLDATABASE,
+const conn = mysql.createConnection({
+  host: 'containers-us-west-123.railway.app', // ✅ changed from 'localhost'
+  user: 'root', 
+  password: '1123',
+  port: '3306',
+  database: 'xyz',
 });
+
+// // // MySQL config
+// const connection = mysql.createConnection({
+//   host: process.env.MYSQLHOST,
+//   port: process.env.MYSQLPORT,
+//   user: process.env.MYSQLUSER,
+//   password: process.env.MYSQLPASSWORD,
+//   database: process.env.MYSQLDATABASE,
+// });
 // Register Route
 app.post('/register', (req, res) => {
     const { username, email, password } = req.body;
