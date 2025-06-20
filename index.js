@@ -13,23 +13,23 @@ app.use(cors());
 // Middleware
 app.use(bodyParser.json());
 
-// const conn = mysql.createConnection({
-//   host: 'localhost',
-//   user: 'root',
-//   password: '1123',
-//   port: '3306',
-//   database: 'xyz',
-// });
-
-// MySQL config
 const conn = mysql.createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
-  database: process.env.DB_NAME,
-  ssl: { rejectUnauthorized: false }
+  host: 'localhost',
+  user: 'root',
+  password: '1123',
+  port: '3306',
+  database: 'xyz',
 });
+
+// // MySQL config
+// const conn = mysql.createConnection({
+//   host: process.env.DB_HOST,
+//   user: process.env.DB_USER,
+//   password: process.env.DB_PASSWORD,
+//   port: process.env.DB_PORT,
+//   database: process.env.DB_NAME,
+//   ssl: { rejectUnauthorized: false }
+// });
 // Register Route
 app.post('/register', (req, res) => {
     const { username, email, password } = req.body;
