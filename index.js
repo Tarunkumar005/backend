@@ -19,6 +19,14 @@ const connection = mysql.createConnection({
   database: process.env.MYSQLDATABASE,
 });
 
+console.log("Env config:", {
+  host: process.env.MYSQLHOST,
+  port: process.env.MYSQLPORT,
+  user: process.env.MYSQLUSER,
+  password: process.env.MYSQLPASSWORD,
+  database: process.env.MYSQLDATABASE,
+});
+
 // ✅ Add error handling for DB connection
 connection.connect((err) => {
   if (err) {
