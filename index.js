@@ -38,11 +38,6 @@ console.log("Env config:", {
 // Root Route
 app.get('/', (req, res) => {
   res.send('Hello World!');
-
-
-
-
-
 });
 
 // Register Route
@@ -162,4 +157,9 @@ app.post('/verifyAndDelete', (req, res) => {
       res.status(200).send('User deleted successfully');
     });
   });
+});
+
+// ✅ Start the server
+app.listen(port, () => {
+  console.log(`🚀 Server is running on http://localhost:${port}`);
 });
