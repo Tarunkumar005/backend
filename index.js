@@ -1,16 +1,36 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const mysql = require('mysql2');
-const cors = require('cors');
-require('dotenv').config();
+import express from 'express';
+import http from 'http';
+import cors from 'cors';
+import { Server } from 'socket.io';
+import mysql from 'mysql2';
+import bodyParser from 'body-parser';
+import dotenv from 'dotenv';
+
+dotenv.config(); // Load env variables
 
 const app = express();
-const port = 3002;
+const server = http.createServer(app);
 
-app.use(cors());
+// ✅ Middleware
+app.use(cors({
+  origin: [
+    "http://localhost:3000",
+  ],
+  methods: ['GET', 'POST', 'UPDATE', 'DELETE'],
+  credentials: true,
+}));
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-// ✅ MySQL Pool Configuration
+// // ✅ MySQL DB Connection
+// const connection = mysql.createConnection({
+//   host: process.env.DB_HOST || "localhost",
+//   port: process.env.DB_PORT || 3306,
+//   user: process.env.DB_USER || "root",
+//   password: process.env.DB_PASSWORD || 1123,
+//   database: process.env.DB_NAME || "chat",
+// });
+
 const pool = mysql.createPool({
   host: process.env.MYSQLHOST,
   port: process.env.MYSQLPORT,
@@ -22,56 +42,73 @@ const pool = mysql.createPool({
   queueLimit: 0,
 });
 
-// ✅ Keep connection alive (for Vercel or other serverless platforms)
-setInterval(() => {
-  pool.query('SELECT 1');
-}, 300000); // every 5 minutes
-
-console.log("Env config:", {
-  host: process.env.MYSQLHOST,
-  port: process.env.MYSQLPORT,
-  user: process.env.MYSQLUSER,
-  password: process.env.MYSQLPASSWORD,
-  database: process.env.MYSQLDATABASE,
+// ✅ Test connection
+pool.getConnection((err, connection) => {
+  if (err) {
+    console.error("❌ Failed to connect to MySQL:", err);
+    process.exit(1);
+  } else {
+    console.log("✅ Connected to MySQL database!");
+    connection.release(); // Always release the connection back to pool
+  }
 });
 
-// Root Route
+// ✅ REST APIs
 app.get('/', (req, res) => {
-  res.send('Hello World!');
+  res.send('Socket.IO server is running');
 });
 
-// Register Route
+// ✅ Register route
 app.post('/register', (req, res) => {
   const { username, email, password } = req.body;
-  const sql = 'INSERT INTO Users (Name, Email, Password) VALUES (?, ?, ?)';
-  pool.query(sql, [username, email, password], (err, results) => {
+
+  const checkSql = 'SELECT * FROM Users WHERE Email = ?';
+  pool.query(checkSql, [email], (err, results) => {
     if (err) {
-      console.error('Error inserting user:', err);
+      console.error('Error checking existing user:', err);
       return res.status(500).send('Database error');
     }
-    res.status(200).send('User added successfully');
+
+    if (results.length > 0) {
+      return res.status(409).json({ message: 'User already exists' });
+    }
+
+    const insertSql = 'INSERT INTO Users (Name, Email, Password) VALUES (?, ?, ?)';
+    pool.query(insertSql, [username, email, password], (err) => {
+      if (err) {
+        console.error('Error inserting user:', err);
+        return res.status(500).send('Database error');
+      }
+
+      res.status(200).json({ message: 'User added successfully' });
+    });
   });
 });
 
-// Login Route
+// ✅ Login route
 app.post('/login', (req, res) => {
   const { email, password } = req.body;
-  const sql = 'SELECT * FROM Users WHERE Email = ? AND Password = ?';
-  pool.query(sql, [email, password], (err, results) => {
+
+  const sql = 'SELECT * FROM Users WHERE Email = ?';
+  pool.query(sql, [email], (err, results) => {
     if (err) {
       console.error('Error during login:', err);
       return res.status(500).send('Database error');
     }
 
-    if (results.length > 0) {
-      res.status(200).json({ message: 'Login successful', user: results[0] });
-    } else {
-      res.status(401).json({ message: 'Invalid email or password' });
+    if (results.length === 0) {
+      return res.status(404).json({ message: 'No account found with that email' });
     }
+
+    const user = results[0];
+    if (user.Password !== password) {
+      return res.status(401).json({ message: 'Incorrect password' });
+    }
+
+    res.status(200).json({ message: 'Login successful', user });
   });
 });
 
-// Get Users Route
 app.get('/users', (req, res) => {
   const sql = 'SELECT * FROM Users';
   pool.query(sql, (err, results) => {
@@ -83,83 +120,74 @@ app.get('/users', (req, res) => {
   });
 });
 
-// Add Note Route
-app.post('/addNote', (req, res) => {
-  const { title, content, email } = req.body;
-  const sql = 'INSERT INTO Notes (Title, Content, Useremail) VALUES (?, ?, ?)';
-  pool.query(sql, [title, content, email], (err, results) => {
-    if (err) {
-      console.error('Error inserting note:', err);
-      return res.status(500).send('Database error');
-    }
-    res.status(200).send('Note added successfully');
-  });
+// ✅ Socket.IO Setup
+const io = new Server(server, {
+  cors: {
+    origin: [
+      "http://localhost:3000",
+    ],
+    methods: ['GET', 'POST'],
+    credentials: true,
+  }
 });
 
-// Get Notes Route
-app.get('/getNotes', (req, res) => {
-  const userEmail = req.query.email;
+app.post('/update-socket', (req, res) => {
+  const { email, socket_id } = req.body;
 
-  if (!userEmail) {
-    return res.status(400).send("Email is required");
+  if (!email) {
+    return res.status(400).send('Email is required');
   }
 
-  const sql = 'SELECT * FROM Notes WHERE Useremail = ?';
-  pool.query(sql, [userEmail], (err, results) => {
+  const sql = 'UPDATE Users SET Socket_id = ? WHERE Email = ?';
+  pool.query(sql, [socket_id, email], (err) => {
     if (err) {
-      console.error('Error fetching notes:', err);
+      console.error('Error updating socket ID:', err);
       return res.status(500).send('Database error');
     }
-    res.status(200).json(results);
+    res.status(200).send('Socket ID updated successfully');
   });
 });
 
-// Delete Note Route
-app.delete('/deleteNote/:id', (req, res) => {
-  const noteId = req.params.id;
-  const sql = 'DELETE FROM Notes WHERE ID = ?';
-  pool.query(sql, [noteId], (err, result) => {
-    if (err) {
-      console.error('Error deleting note:', err);
-      return res.status(500).send('Database error');
-    }
-    if (result.affectedRows === 0) {
-      return res.status(404).send('Note not found');
-    }
-    res.status(200).send('Note deleted successfully');
-  });
-});
+io.on('connection', (socket) => {
+  // console.log(`⚡ Client connected: ${socket.id}`);
 
-// Verify and Delete User Route
-app.post('/verifyAndDelete', (req, res) => {
-  const { email, password } = req.body;
-  const sql = 'SELECT * FROM Users WHERE Email = ?';
-  pool.query(sql, [email], (err, results) => {
-    if (err) {
-      console.error('Database error:', err);
-      return res.status(500).send('Server error');
-    }
+  // Store the email when "join" is received
+  let userEmail = null;
 
-    if (results.length === 0) return res.status(404).send('User not found');
+  socket.on("join", ({ email }) => {
+    console.log(`✅ User joined: ${email} with socket id ${socket.id}`);
+    userEmail = email;
 
-    const user = results[0];
-
-    if (user.Password !== password) {
-      return res.status(401).send('Invalid credentials');
-    }
-
-    const deleteSql = 'DELETE FROM Users WHERE Email = ?';
-    pool.query(deleteSql, [email], (err2) => {
-      if (err2) {
-        console.error('Delete error:', err2);
-        return res.status(500).send('Delete failed');
-      }
-      res.status(200).send('User deleted successfully');
+    const sql = 'UPDATE Users SET Socket_id = ? WHERE Email = ?';
+    pool.query(sql, [socket.id, email], (err) => {
+      if (err) console.error("Error updating socket id:", err);
+      socket.broadcast.emit("user-list-updated");
     });
   });
+
+  socket.on("message", ({ message, socketId }) => {
+    console.log("📨 Message from:", socket.id, "to:", socketId);
+    io.to(socketId).emit("recieve-message", { message, from: socket.id });
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`❌ User disconnected: ${socket.id}`);
+
+    if (userEmail) {
+      const sql = 'UPDATE Users SET Socket_id = NULL WHERE Email = ?';
+      pool.query(sql, [userEmail], (err) => {
+        if (err) {
+          console.error("Error clearing socket id:", err);
+        } else {
+          socket.broadcast.emit("user-list-updated");
+        }
+      });
+    }
+  });
 });
 
-// Start Server
-app.listen(port, () => {
-  console.log(`Server listening at http://localhost:${port}`);
+// ✅ Start Server
+const PORT = process.env.PORT || 3005;
+server.listen(PORT, () => {
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
